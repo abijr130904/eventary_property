@@ -29,8 +29,7 @@ final List<Property> dummyProperties = [
     area: 1500,
     latitude: -7.8117,
     longitude: 110.3922,
-    description:
-        'A large, flexible convention hall designed for exhibitions, '
+    description: 'A large, flexible convention hall designed for exhibitions, '
         'conferences, and multi-day events with modular seating.',
   ),
   const Property(
@@ -55,8 +54,7 @@ final List<Property> dummyProperties = [
     area: 2000,
     latitude: -7.7706,
     longitude: 110.3789,
-    description:
-        'A column-free exhibition space with adaptable lighting rigs, '
+    description: 'A column-free exhibition space with adaptable lighting rigs, '
         'built for trade shows and product launches.',
   ),
   const Property(
@@ -81,8 +79,7 @@ final List<Property> dummyProperties = [
     area: 450,
     latitude: -7.7492,
     longitude: 110.3897,
-    description:
-        'A versatile indoor event space with movable partitions, '
+    description: 'A versatile indoor event space with movable partitions, '
         'suited for pop-up events, launches, and mid-size gatherings.',
   ),
   // The only venue with a real 3D model so far (exported from Blender).
@@ -96,10 +93,9 @@ final List<Property> dummyProperties = [
     type: 'Event Space',
     capacity: 30,
     area: 110, // rough footprint of the 3D model (about 11 m x 10 m)
-    latitude: -7.7830,
-    longitude: 110.3900,
-    description:
-        'An office terrace with brick flooring, wooden furniture, and '
+    latitude: -7.749705,
+    longitude: 110.395852,
+    description: 'An office terrace with brick flooring, wooden furniture, and '
         'string lights - a relaxed setting for small gatherings and '
         'networking events.',
     modelAssetPath: 'assets/models/TerasKantorTechnoGIS_web.glb',

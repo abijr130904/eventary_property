@@ -10,25 +10,26 @@ class SidebarItem {
 
 const List<SidebarItem> sidebarItems = [
   SidebarItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
-  SidebarItem(icon: Icons.apartment_rounded, label: 'Properties'),
+  SidebarItem(icon: Icons.map_rounded, label: 'Peta Properti'),
   SidebarItem(icon: Icons.event_rounded, label: 'Events'),
   SidebarItem(icon: Icons.settings_rounded, label: 'Settings'),
 ];
 
-/// Left navigation rail. Purely presentational for the prototype -
-/// `selectedIndex` is kept in [onSelect] callback so a future router
-/// can be wired in without changing this widget's shape.
-class Sidebar extends StatefulWidget {
+/// Left navigation rail. `selectedIndex`/`onSelect` are lifted up to
+/// HomeScreen so the drawer (narrow layout) and the fixed rail (wide
+/// layout) always agree on which menu is active, and so HomeScreen can
+/// swap the main content area accordingly.
+class Sidebar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
   final VoidCallback? onClose;
 
-  const Sidebar({super.key, this.onClose});
-
-  @override
-  State<Sidebar> createState() => _SidebarState();
-}
-
-class _SidebarState extends State<Sidebar> {
-  int _selectedIndex = 0;
+  const Sidebar({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelect,
+    this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -85,9 +86,9 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
           const Spacer(),
-          if (widget.onClose != null)
+          if (onClose != null)
             IconButton(
-              onPressed: widget.onClose,
+              onPressed: onClose,
               icon: const Icon(Icons.close, color: AppColors.textOnDarkMuted, size: 20),
             ),
         ],
@@ -96,7 +97,7 @@ class _SidebarState extends State<Sidebar> {
   }
 
   Widget _buildNavTile(int index, SidebarItem item) {
-    final bool selected = index == _selectedIndex;
+    final bool selected = index == selectedIndex;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Material(
@@ -104,7 +105,10 @@ class _SidebarState extends State<Sidebar> {
         borderRadius: BorderRadius.circular(AppRadius.sm),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.sm),
-          onTap: () => setState(() => _selectedIndex = index),
+          onTap: () {
+            onSelect(index);
+            onClose?.call();
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),

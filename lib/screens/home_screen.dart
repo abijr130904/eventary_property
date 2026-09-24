@@ -6,6 +6,7 @@ import '../widgets/property_card.dart';
 import '../widgets/property_detail.dart';
 import '../widgets/property_map.dart';
 import '../widgets/sidebar.dart';
+import 'admin_dashboard_screen.dart';
 
 const double _narrowBreakpoint = 900;
 const double _stackedDetailBreakpoint = 1150;
@@ -18,13 +19,19 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Property> _properties = dummyProperties;
+  // Copied (not aliased) so CRUD edits don't mutate the shared
+  // `dummyProperties` list itself.
+  final List<Property> _properties = List<Property>.from(dummyProperties);
 
   Property? _popupProperty; // marker just tapped -> mini card
   Property? _detailProperty; // "View Details" pressed -> full panel
 
   String _query = '';
   String? _typeFilter;
+
+  // Which sidebar menu is active. 0 = Dashboard (Eventaris only),
+  // 1 = Peta Properti (map + search, the old default body).
+  int _selectedMenu = 0;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -51,6 +58,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // ---- CRUD (in-memory for now, no backend) ---------------------------
+
+  void _addProperty(Property property) {
+    setState(() => _properties.add(property));
+  }
+
+  void _updateProperty(Property updated) {
+    setState(() {
+      final index = _properties.indexWhere((p) => p.id == updated.id);
+      if (index != -1) _properties[index] = updated;
+      if (_popupProperty?.id == updated.id) _popupProperty = updated;
+      if (_detailProperty?.id == updated.id) _detailProperty = updated;
+    });
+  }
+
+  void _deleteProperty(String id) {
+    setState(() {
+      _properties.removeWhere((p) => p.id == id);
+      if (_popupProperty?.id == id) _popupProperty = null;
+      if (_detailProperty?.id == id) _detailProperty = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -58,33 +88,29 @@ class _HomeScreenState extends State<HomeScreen> {
         final bool isNarrow = constraints.maxWidth < _narrowBreakpoint;
         final bool stackDetail = constraints.maxWidth < _stackedDetailBreakpoint;
 
+        void selectMenu(int index) => setState(() => _selectedMenu = index);
+
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.surface,
           drawer: isNarrow
               ? Drawer(
-                  child: Sidebar(onClose: () => Navigator.of(context).pop()),
+                  child: Sidebar(
+                    selectedIndex: _selectedMenu,
+                    onSelect: selectMenu,
+                    onClose: () => Navigator.of(context).pop(),
+                  ),
                 )
               : null,
           body: SafeArea(
             child: Row(
               children: [
-                if (!isNarrow) const Sidebar(),
+                if (!isNarrow)
+                  Sidebar(selectedIndex: _selectedMenu, onSelect: selectMenu),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildTopBar(isNarrow),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: stackDetail
-                              ? _buildStackedLayout()
-                              : _buildSideBySideLayout(),
-                        ),
-                      ],
-                    ),
+                    child: _buildMainContent(isNarrow, stackDetail),
                   ),
                 ),
               ],
@@ -93,6 +119,35 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  // ---- Main content: switches based on the selected sidebar menu ------
+
+  Widget _buildMainContent(bool isNarrow, bool stackDetail) {
+    switch (_selectedMenu) {
+      case 0: // Dashboard -> Eventaris only, no map.
+        return AdminDashboardScreen(
+          properties: _properties,
+          onAdd: _addProperty,
+          onUpdate: _updateProperty,
+          onDelete: _deleteProperty,
+        );
+      case 1: // Peta Properti -> the map + search/filter UI.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildTopBar(isNarrow),
+            const SizedBox(height: 16),
+            Expanded(
+              child: stackDetail ? _buildStackedLayout() : _buildSideBySideLayout(),
+            ),
+          ],
+        );
+      default: // Events / Settings -> not built yet in this prototype.
+        return const Center(
+          child: Text('Menu ini belum tersedia di prototype.', style: TextStyle(color: AppColors.textSecondary)),
+        );
+    }
   }
 
   // ---- Layout variants -----------------------------------------------
