@@ -3,17 +3,20 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/property.dart';
 import '../theme/app_theme.dart';
 
-/// Ringkasan/statistik seluruh aset — dashboard "pada umumnya" (KPI card +
-/// daftar aset yang butuh perhatian + grafik), terpisah dari tabel detail
-/// Eventaris (lihat AdminDashboardScreen). Read-only: tidak ada aksi
-/// tambah/edit/hapus di sini.
+/// Ringkasan padat seluruh aset — KPI, daftar butuh perhatian, dan
+/// distribusi status/kondisi/tipe dalam satu layar tanpa scroll berlebih.
+/// Terpisah dari tabel detail Eventaris (lihat AdminDashboardScreen).
+/// Read-only: tidak ada aksi tambah/edit/hapus di sini.
 class DashboardScreen extends StatelessWidget {
   final List<Property> properties;
 
   const DashboardScreen({super.key, required this.properties});
 
-  int get _totalCapacity => properties.fold(0, (sum, p) => sum + p.capacity);
-  double get _totalArea => properties.fold(0.0, (sum, p) => sum + p.area);
+  static const double _panelHeight = 230;
+
+  int get _occupied =>
+      properties.where((p) => p.status == 'Booking' || p.status == 'Disewa/Terjual').length;
+
   double get _totalAcquisitionValue =>
       properties.fold(0.0, (sum, p) => sum + (p.acquisitionValue ?? 0));
 
@@ -47,8 +50,7 @@ class DashboardScreen extends StatelessWidget {
     final damaged = properties.where((p) => p.condition != 'Baik').toList()
       ..sort((a, b) {
         const severity = {'Rusak Berat': 0, 'Rusak Ringan': 1};
-        return (severity[a.condition] ?? 2)
-            .compareTo(severity[b.condition] ?? 2);
+        return (severity[a.condition] ?? 2).compareTo(severity[b.condition] ?? 2);
       });
     final noMaintenance = properties
         .where((p) => p.condition == 'Baik' && p.lastMaintenanceDate == null)
@@ -56,17 +58,22 @@ class DashboardScreen extends StatelessWidget {
     return [...damaged, ...noMaintenance];
   }
 
-  String _formatRupiah(double value) {
-    final s = value.toStringAsFixed(0).replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
-    return 'Rp $s';
+  String _formatCompactRupiah(double value) {
+    if (value >= 1e9) return 'Rp ${(value / 1e9).toStringAsFixed(1)} M';
+    if (value >= 1e6) return 'Rp ${(value / 1e6).toStringAsFixed(0)} Jt';
+    return 'Rp ${value.toStringAsFixed(0)}';
   }
 
   @override
   Widget build(BuildContext context) {
+    if (properties.isEmpty) {
+      return const Center(
+        child: Text('Belum ada data aset.', style: TextStyle(color: AppColors.textSecondary)),
+      );
+    }
+
     final attention = _attentionNeeded;
+    final occupancyPct = ((_occupied / properties.length) * 100).round();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 24),
@@ -75,91 +82,71 @@ class DashboardScreen extends StatelessWidget {
         children: [
           const Text(
             'Dashboard',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.3,
-            ),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: -0.3),
           ),
-          const SizedBox(height: 2),
-          const Text(
-            'Ringkasan kondisi & performa seluruh aset',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 20),
-          _buildKpiRow(),
-          const SizedBox(height: 20),
-          _AttentionCard(properties: attention, totalCount: properties.length),
-          const SizedBox(height: 20),
-          const _SectionHeader(
-              icon: Icons.insights_rounded, title: 'Analitik Aset'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          _buildKpiRow(occupancyPct, attention.length),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
-              final bool wide = constraints.maxWidth > 900;
-              final typeChart = _ChartCard(
-                  title: 'Aset per Tipe', child: _buildTypeBarChart());
-              final statusChart = _ChartCard(
-                  title: 'Distribusi Status', child: _buildStatusPieChart());
-              final conditionChart = _ChartCard(
-                  title: 'Distribusi Kondisi',
-                  child: _buildConditionPieChart());
+              final bool wide = constraints.maxWidth > 1000;
+              final attentionPanel = SizedBox(
+                height: _panelHeight,
+                child: _AttentionCard(properties: attention),
+              );
+              final statusPanel = SizedBox(
+                height: _panelHeight,
+                child: _ChartCard(title: 'Distribusi Status', child: _buildPieChart(_countByStatus, _statusColor)),
+              );
+              final conditionPanel = SizedBox(
+                height: _panelHeight,
+                child: _ChartCard(title: 'Distribusi Kondisi', child: _buildPieChart(_countByCondition, _conditionColor)),
+              );
 
               if (!wide) {
                 return Column(
                   children: [
-                    typeChart,
-                    const SizedBox(height: 16),
-                    statusChart,
-                    const SizedBox(height: 16),
-                    conditionChart,
+                    attentionPanel,
+                    const SizedBox(height: 14),
+                    statusPanel,
+                    const SizedBox(height: 14),
+                    conditionPanel,
                   ],
                 );
               }
-              return Column(
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  typeChart,
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: statusChart),
-                      const SizedBox(width: 16),
-                      Expanded(child: conditionChart),
-                    ],
-                  ),
+                  Expanded(child: attentionPanel),
+                  const SizedBox(width: 14),
+                  Expanded(child: statusPanel),
+                  const SizedBox(width: 14),
+                  Expanded(child: conditionPanel),
                 ],
               );
             },
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 220,
+            child: _ChartCard(title: 'Aset per Tipe', child: _buildTypeBarChart()),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildKpiRow() {
+  Widget _buildKpiRow(int occupancyPct, int attentionCount) {
     final cards = [
+      _KpiCard(icon: Icons.apartment_rounded, label: 'Total Aset', value: '${properties.length}', color: AppColors.accent),
+      _KpiCard(icon: Icons.event_available_rounded, label: 'Okupansi', value: '$occupancyPct%', color: AppColors.accentSecondary),
       _KpiCard(
-          icon: Icons.apartment_rounded,
-          label: 'Total Aset',
-          value: '${properties.length}',
-          color: AppColors.accent),
-      _KpiCard(
-          icon: Icons.people_alt_rounded,
-          label: 'Total Kapasitas',
-          value: '$_totalCapacity orang',
-          color: AppColors.accentSecondary),
-      _KpiCard(
-          icon: Icons.square_foot_rounded,
-          label: 'Total Luas',
-          value: '${_totalArea.toStringAsFixed(0)} m²',
-          color: AppColors.success),
-      _KpiCard(
-          icon: Icons.payments_rounded,
-          label: 'Total Nilai Perolehan',
-          value: _formatRupiah(_totalAcquisitionValue),
-          color: AppColors.warning),
+        icon: attentionCount > 0 ? Icons.report_problem_rounded : Icons.check_circle_rounded,
+        label: 'Butuh Perhatian',
+        value: '$attentionCount aset',
+        color: attentionCount > 0 ? AppColors.danger : AppColors.success,
+      ),
+      _KpiCard(icon: Icons.payments_rounded, label: 'Total Nilai Aset', value: _formatCompactRupiah(_totalAcquisitionValue), color: AppColors.warning),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -167,15 +154,14 @@ class DashboardScreen extends StatelessWidget {
         if (!wide) {
           return Column(
             children: [
-              for (final c in cards)
-                Padding(padding: const EdgeInsets.only(bottom: 12), child: c),
+              for (final c in cards) Padding(padding: const EdgeInsets.only(bottom: 10), child: c),
             ],
           );
         }
         return Row(
           children: [
             for (int i = 0; i < cards.length; i++) ...[
-              if (i > 0) const SizedBox(width: 16),
+              if (i > 0) const SizedBox(width: 14),
               Expanded(child: cards[i]),
             ],
           ],
@@ -188,8 +174,7 @@ class DashboardScreen extends StatelessWidget {
     final entries = _countByType.entries.toList();
     if (entries.isEmpty) return const _EmptyChartPlaceholder();
 
-    final maxY =
-        entries.map((e) => e.value).fold(0, (a, b) => a > b ? a : b).toDouble();
+    final maxY = entries.map((e) => e.value).fold(0, (a, b) => a > b ? a : b).toDouble();
 
     return BarChart(
       BarChartData(
@@ -207,7 +192,7 @@ class DashboardScreen extends StatelessWidget {
                     end: Alignment.topCenter,
                     colors: AppColors.accentGradient,
                   ),
-                  width: 22,
+                  width: 24,
                   borderRadius: BorderRadius.circular(6),
                 ),
               ],
@@ -217,43 +202,35 @@ class DashboardScreen extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: 1,
-          getDrawingHorizontalLine: (value) =>
-              FlLine(color: AppColors.border, strokeWidth: 1),
+          getDrawingHorizontalLine: (value) => FlLine(color: AppColors.border, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 28,
+              reservedSize: 26,
               interval: 1,
               getTitlesWidget: (value, meta) => Text(
                 value.toInt().toString(),
-                style: const TextStyle(
-                    fontSize: 10, color: AppColors.textSecondary),
+                style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
               ),
             ),
           ),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 42,
+              reservedSize: 36,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
-                if (index < 0 || index >= entries.length)
-                  return const SizedBox.shrink();
+                if (index < 0 || index >= entries.length) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     entries[index].key,
-                    style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 9.5, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                 );
@@ -264,11 +241,6 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildStatusPieChart() => _buildPieChart(_countByStatus, _statusColor);
-
-  Widget _buildConditionPieChart() =>
-      _buildPieChart(_countByCondition, _conditionColor);
 
   Color _statusColor(String status) {
     switch (status) {
@@ -313,31 +285,24 @@ class DashboardScreen extends StatelessWidget {
               PieChart(
                 PieChartData(
                   sectionsSpace: 3,
-                  centerSpaceRadius: 34,
+                  centerSpaceRadius: 30,
                   sections: [
                     for (final e in entries)
                       PieChartSectionData(
                         value: e.value.toDouble(),
                         color: colorOf(e.key),
                         title: '${(e.value / total * 100).round()}%',
-                        radius: 44,
-                        titleStyle: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white),
+                        radius: 38,
+                        titleStyle: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
                       ),
                   ],
                 ),
               ),
-              Text('$total',
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary)),
+              Text('$total', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           flex: 2,
           child: Column(
@@ -349,17 +314,10 @@ class DashboardScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
                     children: [
-                      Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(
-                              color: colorOf(e.key), shape: BoxShape.circle)),
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: colorOf(e.key), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text('${e.key} (${e.value})',
-                            style: const TextStyle(
-                                fontSize: 11.5,
-                                color: AppColors.textSecondary)),
+                        child: Text('${e.key} (${e.value})', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                       ),
                     ],
                   ),
@@ -372,44 +330,18 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-
-  const _SectionHeader({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 17, color: AppColors.textSecondary),
-        const SizedBox(width: 6),
-        Text(title,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary)),
-      ],
-    );
-  }
-}
-
 class _KpiCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color color;
 
-  const _KpiCard(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.color});
+  const _KpiCard({required this.icon, required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -419,31 +351,22 @@ class _KpiCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(AppRadius.sm)),
-            child: Icon(icon, color: color, size: 20),
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(AppRadius.sm)),
+            child: Icon(icon, color: color, size: 18),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 3),
+                Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
                 Text(
                   value,
-                  style: const TextStyle(
-                      fontSize: 16,
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontSize: 15, color: AppColors.textPrimary, fontWeight: FontWeight.w800),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -464,8 +387,7 @@ class _ChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 260,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -475,12 +397,8 @@ class _ChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
+          Text(title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
           Expanded(child: child),
         ],
       ),
@@ -488,32 +406,24 @@ class _ChartCard extends StatelessWidget {
   }
 }
 
-/// Kartu "Perlu Perhatian" — aset dengan kondisi rusak diutamakan, lalu
-/// aset yang belum pernah dicatat perawatannya. Bagian paling "urgen" dari
-/// dashboard, ditaruh tepat di bawah KPI, sebelum grafik.
+/// Daftar padat aset yang butuh tindakan: kondisi rusak diutamakan, lalu
+/// aset yang belum pernah dicatat perawatannya. Tinggi tetap, scroll
+/// internal kalau daftarnya panjang — tidak ada teks "+N lainnya" lagi.
 class _AttentionCard extends StatelessWidget {
   final List<Property> properties;
-  final int totalCount;
 
-  const _AttentionCard({required this.properties, required this.totalCount});
-
-  static const int _maxVisible = 5;
+  const _AttentionCard({required this.properties});
 
   @override
   Widget build(BuildContext context) {
-    final visible = properties.take(_maxVisible).toList();
-    final remaining = properties.length - visible.length;
     final isEmpty = properties.isEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(
-            color: isEmpty
-                ? AppColors.border
-                : AppColors.danger.withOpacity(0.35)),
+        border: Border.all(color: isEmpty ? AppColors.border : AppColors.danger.withOpacity(0.35)),
         boxShadow: AppShadows.subtle,
       ),
       child: Column(
@@ -521,66 +431,31 @@ class _AttentionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: (isEmpty ? AppColors.success : AppColors.danger)
-                      .withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Icon(
-                  isEmpty
-                      ? Icons.check_circle_rounded
-                      : Icons.report_problem_rounded,
-                  color: isEmpty ? AppColors.success : AppColors.danger,
-                  size: 18,
-                ),
+              Icon(
+                isEmpty ? Icons.check_circle_rounded : Icons.report_problem_rounded,
+                color: isEmpty ? AppColors.success : AppColors.danger,
+                size: 16,
               ),
-              const SizedBox(width: 10),
-              const Text('Perlu Perhatian',
-                  style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary)),
-              const Spacer(),
-              if (!isEmpty)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                  decoration: BoxDecoration(
-                      color: AppColors.danger.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(999)),
-                  child: Text(
-                    '${properties.length} dari $totalCount aset',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger),
-                  ),
-                ),
+              const SizedBox(width: 6),
+              const Text('Perlu Perhatian', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
             ],
           ),
-          const SizedBox(height: 12),
-          if (isEmpty)
-            const Text(
-              'Semua aset dalam kondisi baik dan tercatat rutin dirawat.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            )
-          else ...[
-            for (final p in visible) _AttentionRow(property: p),
-            if (remaining > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '+$remaining aset lainnya butuh pengecekan',
-                  style: const TextStyle(
-                      fontSize: 11.5,
-                      color: AppColors.textSecondary,
-                      fontStyle: FontStyle.italic),
-                ),
-              ),
-          ],
+          const SizedBox(height: 8),
+          Expanded(
+            child: isEmpty
+                ? const Center(
+                    child: Text(
+                      'Semua aset kondisi baik &\ntercatat rutin dirawat.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: properties.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) => _AttentionRow(property: properties[index]),
+                  ),
+          ),
         ],
       ),
     );
@@ -594,47 +469,29 @@ class _AttentionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool noRecord =
-        property.condition == 'Baik' && property.lastMaintenanceDate == null;
-    final String reason =
-        noRecord ? 'Belum ada catatan perawatan' : property.condition;
-    final Color color = noRecord
-        ? AppColors.textSecondary
-        : (property.condition == 'Rusak Berat'
-            ? AppColors.danger
-            : AppColors.warning);
+    final bool noRecord = property.condition == 'Baik' && property.lastMaintenanceDate == null;
+    final String reason = noRecord ? 'Belum dirawat' : property.condition;
+    final Color color =
+        noRecord ? AppColors.textSecondary : (property.condition == 'Rusak Berat' ? AppColors.danger : AppColors.warning);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              property.name,
-              style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary),
-              overflow: TextOverflow.ellipsis,
-            ),
+    return Row(
+      children: [
+        Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            property.name,
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(999)),
-            child: Text(reason,
-                style: TextStyle(
-                    fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(999)),
+          child: Text(reason, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: color)),
+        ),
+      ],
     );
   }
 }
@@ -645,8 +502,7 @@ class _EmptyChartPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text('Belum ada data.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+      child: Text('Belum ada data.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
     );
   }
 }

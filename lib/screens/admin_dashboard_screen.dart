@@ -77,6 +77,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (confirmed == true) widget.onDelete(property.id);
   }
 
+  Future<void> _openDetail(Property property) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (_) => _PropertyDetailDialog(
+        property: property,
+        canViewOnMap: widget.onViewOnMap != null,
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'edit':
+        _openForm(existing: property);
+        break;
+      case 'delete':
+        _confirmDelete(property);
+        break;
+      case 'map':
+        widget.onViewOnMap?.call(property);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -86,7 +108,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             const Text(
               'Eventaris (Inventaris Aset)',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary),
             ),
             const Spacer(),
             FilledButton.icon(
@@ -107,7 +132,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.search, size: 19, color: AppColors.textSecondary),
+              const Icon(Icons.search,
+                  size: 19, color: AppColors.textSecondary),
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
@@ -155,7 +181,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onPressed: () => _openForm(existing: property),
         ),
         IconButton(
-          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+          icon: const Icon(Icons.delete_outline,
+              size: 18, color: Colors.redAccent),
           tooltip: 'Hapus',
           onPressed: () => _confirmDelete(property),
         ),
@@ -164,9 +191,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildInventoryTable() {
-    final dateFmt = (DateTime? d) =>
-        d == null ? '-' : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-
     return SingleChildScrollView(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -174,35 +198,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           columns: const [
             DataColumn(label: Text('Nama')),
             DataColumn(label: Text('Kode Inventaris')),
-            DataColumn(label: Text('Kategori Aset')),
-            DataColumn(label: Text('Tgl. Perolehan')),
-            DataColumn(label: Text('Nilai Perolehan')),
-            DataColumn(label: Text('Dokumen Legal')),
             DataColumn(label: Text('Kondisi')),
             DataColumn(label: Text('Status')),
-            DataColumn(label: Text('PIC')),
-            DataColumn(label: Text('Perawatan Terakhir')),
+            DataColumn(label: Text('Nilai Perolehan')),
             DataColumn(label: Text('Aksi')),
           ],
           rows: [
             for (final property in _filtered)
               DataRow(
                 cells: [
-                  DataCell(Text(property.name)),
-                  DataCell(Text(property.inventoryCode.isEmpty ? '-' : property.inventoryCode)),
-                  DataCell(Text(property.assetCategory)),
-                  DataCell(Text(dateFmt(property.acquisitionDate))),
-                  DataCell(Text(property.acquisitionValueLabel)),
-                  DataCell(Text(property.legalDocument.isEmpty ? '-' : property.legalDocument)),
-                  DataCell(_ConditionBadge(condition: property.condition)),
-                  DataCell(_StatusBadge(status: property.status)),
-                  DataCell(Text(property.picName.isEmpty ? '-' : property.picName)),
-                  DataCell(Text(
-                    property.lastMaintenanceDate == null
+                  DataCell(Text(property.name),
+                      onTap: () => _openDetail(property)),
+                  DataCell(
+                    Text(property.inventoryCode.isEmpty
                         ? '-'
-                        : '${dateFmt(property.lastMaintenanceDate)}'
-                            '${property.lastMaintenanceNote.isEmpty ? '' : ' - ${property.lastMaintenanceNote}'}',
-                  )),
+                        : property.inventoryCode),
+                    onTap: () => _openDetail(property),
+                  ),
+                  DataCell(_ConditionBadge(condition: property.condition),
+                      onTap: () => _openDetail(property)),
+                  DataCell(_StatusBadge(status: property.status),
+                      onTap: () => _openDetail(property)),
+                  DataCell(Text(property.acquisitionValueLabel),
+                      onTap: () => _openDetail(property)),
                   DataCell(_actionCell(property)),
                 ],
               ),
@@ -240,7 +258,9 @@ class _StatusBadge extends StatelessWidget {
         color: _color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(status, style: TextStyle(color: _color, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(status,
+          style: TextStyle(
+              color: _color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -270,7 +290,188 @@ class _ConditionBadge extends StatelessWidget {
         color: _color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(condition, style: TextStyle(color: _color, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(condition,
+          style: TextStyle(
+              color: _color, fontSize: 12, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+/// Read-only detail view yang muncul saat baris di tabel Eventaris
+/// di-klik. Menampilkan field yang disembunyikan dari tabel, plus
+/// shortcut edit/hapus/lihat-di-peta. Pop dengan 'edit' / 'delete' /
+/// 'map' supaya _AdminDashboardScreenState yang menentukan aksi
+/// selanjutnya.
+class _PropertyDetailDialog extends StatelessWidget {
+  final Property property;
+  final bool canViewOnMap;
+
+  const _PropertyDetailDialog(
+      {required this.property, required this.canViewOnMap});
+
+  String _dateFmt(DateTime? d) => d == null
+      ? '-'
+      : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      property.name,
+                      style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              Text(property.location,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AppColors.textSecondary)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _StatusBadge(status: property.status),
+                  const SizedBox(width: 8),
+                  _ConditionBadge(condition: property.condition),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _DetailSectionLabel('Info Umum'),
+                      _DetailRow('Tipe', property.type),
+                      _DetailRow('Kapasitas', property.capacityLabel),
+                      _DetailRow('Luas', property.areaLabel),
+                      if (property.description.isNotEmpty)
+                        _DetailRow('Deskripsi', property.description),
+                      const SizedBox(height: 14),
+                      const _DetailSectionLabel('Info Eventaris'),
+                      _DetailRow(
+                          'Kode Inventaris',
+                          property.inventoryCode.isEmpty
+                              ? '-'
+                              : property.inventoryCode),
+                      _DetailRow('Kategori Aset', property.assetCategory),
+                      _DetailRow(
+                          'Tgl. Perolehan', _dateFmt(property.acquisitionDate)),
+                      _DetailRow(
+                          'Nilai Perolehan', property.acquisitionValueLabel),
+                      _DetailRow(
+                          'Dokumen Legal',
+                          property.legalDocument.isEmpty
+                              ? '-'
+                              : property.legalDocument),
+                      _DetailRow('PIC',
+                          property.picName.isEmpty ? '-' : property.picName),
+                      _DetailRow('Perawatan Terakhir',
+                          _dateFmt(property.lastMaintenanceDate)),
+                      if (property.lastMaintenanceNote.isNotEmpty)
+                        _DetailRow(
+                            'Catatan Perawatan', property.lastMaintenanceNote),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (canViewOnMap)
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).pop('map'),
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('Lihat di Peta'),
+                    ),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).pop('edit'),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Edit'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).pop('delete'),
+                    icon: const Icon(Icons.delete_outline,
+                        size: 16, color: Colors.redAccent),
+                    label: const Text('Hapus',
+                        style: TextStyle(color: Colors.redAccent)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailSectionLabel extends StatelessWidget {
+  final String label;
+  const _DetailSectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondary)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -336,7 +537,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
     );
     _legalDocument = TextEditingController(text: p?.legalDocument ?? '');
     _picName = TextEditingController(text: p?.picName ?? '');
-    _lastMaintenanceNote = TextEditingController(text: p?.lastMaintenanceNote ?? '');
+    _lastMaintenanceNote =
+        TextEditingController(text: p?.lastMaintenanceNote ?? '');
     _assetCategory = p?.assetCategory ?? kAssetCategories.first;
     _condition = p?.condition ?? kAssetConditions.first;
     _acquisitionDate = p?.acquisitionDate;
@@ -361,7 +563,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
   }
 
   Future<void> _pickDate({required bool isAcquisition}) async {
-    final initial = (isAcquisition ? _acquisitionDate : _lastMaintenanceDate) ?? DateTime.now();
+    final initial = (isAcquisition ? _acquisitionDate : _lastMaintenanceDate) ??
+        DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -379,7 +582,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
   }
 
   Future<void> _pickOnMap() async {
-    final picked = await pickCoordinateOnMap(context, LatLng(_latitude, _longitude));
+    final picked =
+        await pickCoordinateOnMap(context, LatLng(_latitude, _longitude));
     if (picked != null) {
       setState(() {
         _latitude = picked.latitude;
@@ -432,7 +636,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
               children: [
                 Text(
                   _isEdit ? 'Edit Aset' : 'Tambah Aset',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
@@ -443,31 +648,40 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                         TextFormField(
                           controller: _name,
                           decoration: const InputDecoration(labelText: 'Nama'),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Wajib diisi'
+                              : null,
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _location,
-                          decoration: const InputDecoration(labelText: 'Lokasi (alamat/kawasan)'),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
+                          decoration: const InputDecoration(
+                              labelText: 'Lokasi (alamat/kawasan)'),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Wajib diisi'
+                              : null,
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: _type,
                           decoration: const InputDecoration(labelText: 'Tipe'),
                           items: [
-                            for (final t in kPropertyTypes) DropdownMenuItem(value: t, child: Text(t)),
+                            for (final t in kPropertyTypes)
+                              DropdownMenuItem(value: t, child: Text(t)),
                           ],
                           onChanged: (v) => setState(() => _type = v ?? _type),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: _status,
-                          decoration: const InputDecoration(labelText: 'Status'),
+                          decoration:
+                              const InputDecoration(labelText: 'Status'),
                           items: [
-                            for (final s in kPropertyStatuses) DropdownMenuItem(value: s, child: Text(s)),
+                            for (final s in kPropertyStatuses)
+                              DropdownMenuItem(value: s, child: Text(s)),
                           ],
-                          onChanged: (v) => setState(() => _status = v ?? _status),
+                          onChanged: (v) =>
+                              setState(() => _status = v ?? _status),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -475,18 +689,26 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                             Expanded(
                               child: TextFormField(
                                 controller: _capacity,
-                                decoration: const InputDecoration(labelText: 'Kapasitas (orang)'),
+                                decoration: const InputDecoration(
+                                    labelText: 'Kapasitas (orang)'),
                                 keyboardType: TextInputType.number,
-                                validator: (v) => (int.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
+                                validator: (v) =>
+                                    (int.tryParse(v?.trim() ?? '') == null)
+                                        ? 'Angka'
+                                        : null,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: _area,
-                                decoration: const InputDecoration(labelText: 'Luas (m²)'),
+                                decoration: const InputDecoration(
+                                    labelText: 'Luas (m²)'),
                                 keyboardType: TextInputType.number,
-                                validator: (v) => (double.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
+                                validator: (v) =>
+                                    (double.tryParse(v?.trim() ?? '') == null)
+                                        ? 'Angka'
+                                        : null,
                               ),
                             ),
                           ],
@@ -494,7 +716,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _description,
-                          decoration: const InputDecoration(labelText: 'Deskripsi'),
+                          decoration:
+                              const InputDecoration(labelText: 'Deskripsi'),
                           maxLines: 3,
                         ),
                         const SizedBox(height: 12),
@@ -504,18 +727,30 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                             Expanded(
                               child: TextFormField(
                                 controller: _latitudeText,
-                                decoration: const InputDecoration(labelText: 'Latitude'),
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                                validator: (v) => (double.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
+                                decoration: const InputDecoration(
+                                    labelText: 'Latitude'),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true, signed: true),
+                                validator: (v) =>
+                                    (double.tryParse(v?.trim() ?? '') == null)
+                                        ? 'Angka'
+                                        : null,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: _longitudeText,
-                                decoration: const InputDecoration(labelText: 'Longitude'),
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                                validator: (v) => (double.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
+                                decoration: const InputDecoration(
+                                    labelText: 'Longitude'),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true, signed: true),
+                                validator: (v) =>
+                                    (double.tryParse(v?.trim() ?? '') == null)
+                                        ? 'Angka'
+                                        : null,
                               ),
                             ),
                           ],
@@ -533,7 +768,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                         const Divider(),
                         const SizedBox(height: 8),
                         const Text('Detail Inventaris (Eventaris)',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _inventoryCode,
@@ -545,11 +781,14 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: _assetCategory,
-                          decoration: const InputDecoration(labelText: 'Kategori Aset'),
+                          decoration:
+                              const InputDecoration(labelText: 'Kategori Aset'),
                           items: [
-                            for (final c in kAssetCategories) DropdownMenuItem(value: c, child: Text(c)),
+                            for (final c in kAssetCategories)
+                              DropdownMenuItem(value: c, child: Text(c)),
                           ],
-                          onChanged: (v) => setState(() => _assetCategory = v ?? _assetCategory),
+                          onChanged: (v) => setState(
+                              () => _assetCategory = v ?? _assetCategory),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -565,7 +804,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                             Expanded(
                               child: TextFormField(
                                 controller: _acquisitionValue,
-                                decoration: const InputDecoration(labelText: 'Nilai Perolehan (Rp)'),
+                                decoration: const InputDecoration(
+                                    labelText: 'Nilai Perolehan (Rp)'),
                                 keyboardType: TextInputType.number,
                               ),
                             ),
@@ -585,18 +825,22 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 value: _condition,
-                                decoration: const InputDecoration(labelText: 'Kondisi'),
+                                decoration:
+                                    const InputDecoration(labelText: 'Kondisi'),
                                 items: [
-                                  for (final c in kAssetConditions) DropdownMenuItem(value: c, child: Text(c)),
+                                  for (final c in kAssetConditions)
+                                    DropdownMenuItem(value: c, child: Text(c)),
                                 ],
-                                onChanged: (v) => setState(() => _condition = v ?? _condition),
+                                onChanged: (v) => setState(
+                                    () => _condition = v ?? _condition),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: _picName,
-                                decoration: const InputDecoration(labelText: 'PIC / Penanggung Jawab'),
+                                decoration: const InputDecoration(
+                                    labelText: 'PIC / Penanggung Jawab'),
                               ),
                             ),
                           ],
@@ -610,7 +854,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _lastMaintenanceNote,
-                          decoration: const InputDecoration(labelText: 'Catatan Perawatan'),
+                          decoration: const InputDecoration(
+                              labelText: 'Catatan Perawatan'),
                         ),
                       ],
                     ),
@@ -645,12 +890,14 @@ class _DatePickerField extends StatelessWidget {
   final DateTime? value;
   final VoidCallback onTap;
 
-  const _DatePickerField({required this.label, required this.value, required this.onTap});
+  const _DatePickerField(
+      {required this.label, required this.value, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final text =
-        value == null ? 'Pilih tanggal' : '${value!.day.toString().padLeft(2, '0')}/${value!.month.toString().padLeft(2, '0')}/${value!.year}';
+    final text = value == null
+        ? 'Pilih tanggal'
+        : '${value!.day.toString().padLeft(2, '0')}/${value!.month.toString().padLeft(2, '0')}/${value!.year}';
     return InkWell(
       onTap: onTap,
       child: InputDecorator(
