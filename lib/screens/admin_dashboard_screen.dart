@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import '../models/property.dart';
 import '../theme/app_theme.dart';
+import '../widgets/coordinate_picker_dialog.dart';
 
 /// Internal dashboard for managing the property/venue dataset: a
 /// searchable table plus add/edit/delete, backed by the same in-memory
@@ -12,6 +13,7 @@ class AdminDashboardScreen extends StatefulWidget {
   final ValueChanged<Property> onAdd;
   final ValueChanged<Property> onUpdate;
   final ValueChanged<String> onDelete; // by property id
+  final ValueChanged<Property>? onViewOnMap;
 
   const AdminDashboardScreen({
     super.key,
@@ -19,6 +21,7 @@ class AdminDashboardScreen extends StatefulWidget {
     required this.onAdd,
     required this.onUpdate,
     required this.onDelete,
+    this.onViewOnMap,
   });
 
   @override
@@ -140,6 +143,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (widget.onViewOnMap != null)
+          IconButton(
+            icon: const Icon(Icons.map_outlined, size: 18),
+            tooltip: 'Lihat di Peta',
+            onPressed: () => widget.onViewOnMap!(property),
+          ),
         IconButton(
           icon: const Icon(Icons.edit_outlined, size: 18),
           tooltip: 'Edit',
@@ -296,6 +305,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
   late final TextEditingController _legalDocument;
   late final TextEditingController _picName;
   late final TextEditingController _lastMaintenanceNote;
+  late final TextEditingController _latitudeText;
+  late final TextEditingController _longitudeText;
   late String _assetCategory;
   late String _condition;
   DateTime? _acquisitionDate;
@@ -316,6 +327,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
     _status = p?.status ?? kPropertyStatuses.first;
     _latitude = p?.latitude ?? -7.7830;
     _longitude = p?.longitude ?? 110.3900;
+    _latitudeText = TextEditingController(text: _latitude.toStringAsFixed(6));
+    _longitudeText = TextEditingController(text: _longitude.toStringAsFixed(6));
 
     _inventoryCode = TextEditingController(text: p?.inventoryCode ?? '');
     _acquisitionValue = TextEditingController(
@@ -342,6 +355,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
     _legalDocument.dispose();
     _picName.dispose();
     _lastMaintenanceNote.dispose();
+    _latitudeText.dispose();
+    _longitudeText.dispose();
     super.dispose();
   }
 
@@ -364,14 +379,13 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
   }
 
   Future<void> _pickOnMap() async {
-    final picked = await showDialog<LatLng>(
-      context: context,
-      builder: (_) => _CoordinatePickerDialog(initial: LatLng(_latitude, _longitude)),
-    );
+    final picked = await pickCoordinateOnMap(context, LatLng(_latitude, _longitude));
     if (picked != null) {
       setState(() {
         _latitude = picked.latitude;
         _longitude = picked.longitude;
+        _latitudeText.text = _latitude.toStringAsFixed(6);
+        _longitudeText.text = _longitude.toStringAsFixed(6);
       });
     }
   }
@@ -385,8 +399,8 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
       type: _type,
       capacity: int.tryParse(_capacity.text.trim()) ?? 0,
       area: double.tryParse(_area.text.trim()) ?? 0,
-      latitude: _latitude,
-      longitude: _longitude,
+      latitude: double.tryParse(_latitudeText.text.trim()) ?? _latitude,
+      longitude: double.tryParse(_longitudeText.text.trim()) ?? _longitude,
       description: _description.text.trim(),
       modelAssetPath: widget.existing?.modelAssetPath,
       status: _status,
@@ -484,27 +498,35 @@ class _PropertyFormDialogState extends State<_PropertyFormDialog> {
                           maxLines: 3,
                         ),
                         const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Koordinat: ${_latitude.toStringAsFixed(5)}, ${_longitude.toStringAsFixed(5)}',
-                                  style: const TextStyle(fontSize: 12.5),
-                                ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _latitudeText,
+                                decoration: const InputDecoration(labelText: 'Latitude'),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                                validator: (v) => (double.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
                               ),
-                              TextButton.icon(
-                                onPressed: _pickOnMap,
-                                icon: const Icon(Icons.map_outlined, size: 16),
-                                label: const Text('Pilih di peta'),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _longitudeText,
+                                decoration: const InputDecoration(labelText: 'Longitude'),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                                validator: (v) => (double.tryParse(v?.trim() ?? '') == null) ? 'Angka' : null,
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _pickOnMap,
+                            icon: const Icon(Icons.map_outlined, size: 16),
+                            label: const Text('Pilih di peta'),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -638,75 +660,6 @@ class _DatePickerField extends StatelessWidget {
           children: [
             Text(text, style: const TextStyle(fontSize: 13.5)),
             const Icon(Icons.calendar_today_outlined, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Full-screen-ish dialog for picking a lat/lng: a fixed center pin plus
-/// a "use this location" button, rather than tap-to-place - avoids having
-/// to draw/manage a movable marker on top of the map.
-class _CoordinatePickerDialog extends StatefulWidget {
-  final LatLng initial;
-  const _CoordinatePickerDialog({required this.initial});
-
-  @override
-  State<_CoordinatePickerDialog> createState() => _CoordinatePickerDialogState();
-}
-
-class _CoordinatePickerDialogState extends State<_CoordinatePickerDialog> {
-  MapLibreMapController? _controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      child: SizedBox(
-        width: 520,
-        height: 520,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text('Geser peta agar pin berada di lokasi aset',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  MapLibreMap(
-                    styleString: 'https://tiles.openfreemap.org/styles/liberty',
-                    initialCameraPosition: CameraPosition(target: widget.initial, zoom: 15),
-                    trackCameraPosition: true,
-                    onMapCreated: (c) => _controller = c,
-                    myLocationEnabled: false,
-                  ),
-                  const Icon(Icons.location_pin, size: 40, color: Colors.redAccent),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: FilledButton(
-                onPressed: () {
-                  final target = _controller?.cameraPosition?.target ?? widget.initial;
-                  Navigator.of(context).pop(target);
-                },
-                child: const Text('Gunakan Lokasi Ini'),
-              ),
-            ),
           ],
         ),
       ),

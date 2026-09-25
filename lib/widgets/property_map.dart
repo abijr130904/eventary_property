@@ -11,6 +11,10 @@ enum MapLayerMode { streets, satellite }
 const LatLng _initialCenter = LatLng(-7.7830, 110.3900);
 const double _initialZoom = 12.5;
 
+/// Zoom level used when the map auto-focuses on a specific property
+/// (selected from the marker, from the Eventaris dashboard, etc.).
+const double _focusZoom = 16.5;
+
 /// Real, interactive vector map rendered natively via `maplibre_gl`
 /// (MapLibre Native on Android/iOS, MapLibre GL JS on Web) - no API
 /// key required for either tile source used here:
@@ -58,6 +62,21 @@ class _PropertyMapState extends State<PropertyMap> {
 
   static const String _streetsStyleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 
+  @override
+  void initState() {
+    super.initState();
+    // If the map is (re)created with a property already selected (e.g.
+    // navigating here from the Eventaris dashboard's "Lihat di Peta"),
+    // open already centered/zoomed on it instead of the default view.
+    final selected = widget.selectedProperty;
+    if (selected != null) {
+      _camera = CameraPosition(
+        target: LatLng(selected.latitude, selected.longitude),
+        zoom: _focusZoom,
+      );
+    }
+  }
+
   /// Built as a raw JSON string (not `asset://...`) so it loads
   /// correctly on every platform - the `asset://` scheme used by
   /// maplibre_gl for bundled Flutter assets is Android/iOS-only and
@@ -94,7 +113,21 @@ class _PropertyMapState extends State<PropertyMap> {
     if (oldWidget.selectedProperty?.id != widget.selectedProperty?.id) {
       _applySelectionHighlight(previous: oldWidget.selectedProperty);
       _updateModelScreenPosition();
+      final selected = widget.selectedProperty;
+      if (selected != null) _focusOnProperty(selected);
     }
+  }
+
+  /// Animates the camera to [property], zooming in if currently more
+  /// zoomed-out than [_focusZoom] (never zooms back out - if the user is
+  /// already closer than that, stay put and just pan).
+  Future<void> _focusOnProperty(Property property) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final targetZoom = _camera.zoom < _focusZoom ? _focusZoom : _camera.zoom;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(property.latitude, property.longitude), targetZoom),
+    );
   }
 
   @override

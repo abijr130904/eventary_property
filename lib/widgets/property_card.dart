@@ -9,12 +9,14 @@ class PropertyCard extends StatelessWidget {
   final Property property;
   final VoidCallback onViewDetails;
   final VoidCallback? onClose;
+  final VoidCallback? onEditLocation;
 
   const PropertyCard({
     super.key,
     required this.property,
     required this.onViewDetails,
     this.onClose,
+    this.onEditLocation,
   });
 
   @override
@@ -63,6 +65,18 @@ class PropertyCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (onEditLocation != null)
+                Tooltip(
+                  message: 'Ubah Koordinat',
+                  child: InkWell(
+                    onTap: onEditLocation,
+                    borderRadius: BorderRadius.circular(6),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: Icon(Icons.edit_location_alt_outlined, size: 14, color: AppColors.accent),
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),

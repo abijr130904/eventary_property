@@ -1,7 +1,10 @@
+import 'package:eventary_prototype/screens/dashboard_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' show LatLng;
 import '../data/dummy_properties.dart';
 import '../models/property.dart';
 import '../theme/app_theme.dart';
+import '../widgets/coordinate_picker_dialog.dart';
 import '../widgets/property_card.dart';
 import '../widgets/property_detail.dart';
 import '../widgets/property_map.dart';
@@ -81,12 +84,37 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Opens the shared map-picker dialog for [property] and applies the
+  /// new coordinates via [_updateProperty] if the user confirms one.
+  Future<void> _editPropertyLocation(Property property) async {
+    final picked = await pickCoordinateOnMap(
+      context,
+      LatLng(property.latitude, property.longitude),
+    );
+    if (picked != null) {
+      _updateProperty(property.copyWith(
+          latitude: picked.latitude, longitude: picked.longitude));
+    }
+  }
+
+  /// Called from the Eventaris dashboard's "Lihat di Peta" action:
+  /// switches to the map menu with [property] selected, so PropertyMap
+  /// auto-zooms straight to it (see PropertyMap's didUpdateWidget).
+  void _viewPropertyOnMap(Property property) {
+    setState(() {
+      _selectedMenu = 2;
+      _popupProperty = property;
+      _detailProperty = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isNarrow = constraints.maxWidth < _narrowBreakpoint;
-        final bool stackDetail = constraints.maxWidth < _stackedDetailBreakpoint;
+        final bool stackDetail =
+            constraints.maxWidth < _stackedDetailBreakpoint;
 
         void selectMenu(int index) => setState(() => _selectedMenu = index);
 
@@ -125,27 +153,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMainContent(bool isNarrow, bool stackDetail) {
     switch (_selectedMenu) {
-      case 0: // Dashboard -> Eventaris only, no map.
+      case 0: // Dashboard -> ringkasan/statistik (KPI + grafik).
+        return DashboardScreen(properties: _properties);
+      case 1: // Eventaris -> tabel inventaris aset (dulu ada di index 0).
         return AdminDashboardScreen(
           properties: _properties,
           onAdd: _addProperty,
           onUpdate: _updateProperty,
           onDelete: _deleteProperty,
+          onViewOnMap: _viewPropertyOnMap,
         );
-      case 1: // Peta Properti -> the map + search/filter UI.
+      case 2: // Peta Properti -> map + search/filter UI (dulu index 1).
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildTopBar(isNarrow),
             const SizedBox(height: 16),
             Expanded(
-              child: stackDetail ? _buildStackedLayout() : _buildSideBySideLayout(),
+              child: stackDetail
+                  ? _buildStackedLayout()
+                  : _buildSideBySideLayout(),
             ),
           ],
         );
-      default: // Events / Settings -> not built yet in this prototype.
+      default: // Events / Settings -> belum dibuat.
         return const Center(
-          child: Text('Menu ini belum tersedia di prototype.', style: TextStyle(color: AppColors.textSecondary)),
+          child: Text('Menu ini belum tersedia di prototype.',
+              style: TextStyle(color: AppColors.textSecondary)),
         );
     }
   }
@@ -213,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
               property: _popupProperty!,
               onViewDetails: () => _onViewDetails(_popupProperty!),
               onClose: () => setState(() => _popupProperty = null),
+              onEditLocation: () => _editPropertyLocation(_popupProperty!),
             ),
           ),
       ],
@@ -246,7 +281,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, size: 19, color: AppColors.textSecondary),
+                    const Icon(Icons.search,
+                        size: 19, color: AppColors.textSecondary),
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
@@ -254,7 +290,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: const InputDecoration(
                           border: InputBorder.none,
                           hintText: 'Search properties or venues...',
-                          hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13.5),
+                          hintStyle: TextStyle(
+                              color: AppColors.textSecondary, fontSize: 13.5),
                           isDense: true,
                         ),
                         style: const TextStyle(fontSize: 13.5),
@@ -317,7 +354,8 @@ class _FilterChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  const _FilterChip(
+      {required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -330,7 +368,8 @@ class _FilterChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? AppColors.accent : AppColors.card,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? AppColors.accent : AppColors.border),
+          border:
+              Border.all(color: selected ? AppColors.accent : AppColors.border),
         ),
         alignment: Alignment.center,
         child: Text(

@@ -22,6 +22,7 @@ class AppColors {
   static const Color accentSecondary = Color(0xFF4C6FFF); // blue accent
   static const Color success = Color(0xFF22C55E);
   static const Color warning = Color(0xFFF59E0B);
+  static const Color danger = Color(0xFFEF4444); // <- baris baru
 
   static const List<Color> accentGradient = [accent, accentSecondary];
 

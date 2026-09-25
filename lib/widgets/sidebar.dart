@@ -10,6 +10,7 @@ class SidebarItem {
 
 const List<SidebarItem> sidebarItems = [
   SidebarItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
+  SidebarItem(icon: Icons.inventory_2_rounded, label: 'Eventaris'),
   SidebarItem(icon: Icons.map_rounded, label: 'Peta Properti'),
   SidebarItem(icon: Icons.event_rounded, label: 'Events'),
   SidebarItem(icon: Icons.settings_rounded, label: 'Settings'),
@@ -73,7 +74,8 @@ class Sidebar extends StatelessWidget {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: const Icon(Icons.location_city_rounded, color: Colors.white, size: 18),
+            child: const Icon(Icons.location_city_rounded,
+                color: Colors.white, size: 18),
           ),
           const SizedBox(width: 10),
           const Text(
@@ -89,7 +91,8 @@ class Sidebar extends StatelessWidget {
           if (onClose != null)
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Icons.close, color: AppColors.textOnDarkMuted, size: 20),
+              icon: const Icon(Icons.close,
+                  color: AppColors.textOnDarkMuted, size: 20),
             ),
         ],
       ),
@@ -113,7 +116,9 @@ class Sidebar extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: selected ? Colors.white.withOpacity(0.08) : Colors.transparent,
+              color: selected
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(AppRadius.sm),
               border: selected
                   ? Border.all(color: Colors.white.withOpacity(0.10))
@@ -157,7 +162,11 @@ class Sidebar extends StatelessWidget {
             const CircleAvatar(
               radius: 15,
               backgroundColor: AppColors.accent,
-              child: Text('EV', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+              child: Text('EV',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -165,8 +174,14 @@ class Sidebar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Prototype Mode', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12, fontWeight: FontWeight.w600)),
-                  Text('Local dummy data', style: TextStyle(color: AppColors.textOnDarkMuted, fontSize: 11)),
+                  Text('Prototype Mode',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                  Text('Local dummy data',
+                      style: TextStyle(
+                          color: AppColors.textOnDarkMuted, fontSize: 11)),
                 ],
               ),
             ),
